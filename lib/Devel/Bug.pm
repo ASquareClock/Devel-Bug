@@ -1,57 +1,132 @@
 
 package Devel::Bug;
 
-use v5.30;
+our $VERSION = '0.01';
+
+use v5.8;
 use utf8;
+
+use strict;
 use warnings;
 
-use Term::ANSIColor; 
-use Term::Size::Perl;
-
-use List::Util qw(pairmap);
 use Carp qw(croak carp);
 
-use Data::Dump;
+# use Data::Dump qw(pp);
 
 
 use constant BUG_OPTIONS => {
-    out      => '',
-    package  => '',
-    filename => '',
-    lineno   => '',
-    val      => '*',
+    label       => '',
+    noterm      => '',
+    out         => '*',
+    delims      => '+',
+    color       => '+',
+    infocolor   => '',
+    labelcolor  => '',
+    valcolor    => '',
+    multiline   => '',
+    indices     => '',
+    keyval      => '',
+    package     => '',
+    filename    => '',
+    lineno      => '',
+    val         => '*',
+    pp          => '',
 };
 
 use constant ALIAS_OPTIONS => {
-    output => 'out',
-    pkg    => 'package',
-    fn     => 'filename',
-    line   => 'lineno',
+    n           => 'noterm',
+    noterminal  => 'noterm',
+    output      => 'out',
+    o           => 'out',
+    delimiters  => 'delims',
+    d           => 'delims',
+    ic          => 'infocolor',
+    lc          => 'labelcolor',
+    vc          => 'valcolor',
+    valuecolor  => 'valcolor',
+    ml          => 'multiline',
+    m           => 'multiline',
+    indexes     => 'indices',
+    index       => 'indices',
+    i           => 'indices',
+    '@'         => 'indices',
+    kv          => 'keyval',
+    k           => 'keyval',
+    '%'         => 'keyval',
+    pkg         => 'package',
+    p           => 'package',
+    fn          => 'filename',
+    f           => 'filename',
+    line        => 'lineno',
+    ln          => 'lineno',
+    l           => 'lineno',
+    value       => 'val',
+    v           => 'val',
+    override    => 'val',
 };
 
-use constant USE_OPTIONS => { BUG_OPTIONS->%*, bug => '' };
+use constant USE_OPTIONS => {
+    %{ +BUG_OPTIONS },
+    bug => '',
+};
 
-sub validate { 
-    my $params= shift;
+use constant CALLER_INFO => qw(package filename lineno);
 
-    pairmap {
-        my $a= lc $a;
-        $a= ALIAS_OPTIONS->{$a} if exists ALIAS_OPTIONS->{$a};
 
-        exists $params->{$a} or croak qq(Unknown option '$a');
-        $params->{$a} eq '*' or $params->{$a} eq ref($b) or croak qq(Option '$a' may not be type '@{[ ref($b) || '(SCALAR)' ]}');
+sub _pairs {
+    my $array= shift;
+    my @list;
 
-        $a => $b;
-    } @_;
+    for (my $i= 0; $i < @$array; $i+= 2) {
+        push @list, [ $array->[$i] => $array->[$i + 1] ];
+    }
+
+    @list;
 }
 
 
-our %OPTIONS;
+sub validate {
+    my $optDefs= shift;
+
+    # Get label and option flags, if present.
+    my $label= @_ & 1? shift : '';
+    ($label, my $flags)= split /:/, defined($label) && $label, 2;
+
+    unshift @_,
+        label => defined($label) && $label,
+        map { $_ => 1 } split //, defined($flags) && $flags;
+
+    # Get key/value options.
+    my @options;
+
+    foreach (_pairs \@_) {
+        my $opt= lc $_->[0];
+        local $_= $_->[1];
+
+        $opt= ALIAS_OPTIONS->{$opt} if exists ALIAS_OPTIONS->{$opt};
+
+        exists $optDefs->{$opt} or croak qq(Unknown option '$opt');
+
+        $optDefs->{$opt} eq '+'
+        ?   (defined and $_= m{^(?:on|1)$}i? 1 : m{^(?:auto|)$}i? '' : m{^off$}i? undef : croak qq(Illegal option value: $opt => '$_'))
+        :   ($optDefs->{$opt} eq '*' or $optDefs->{$opt} eq ref or croak qq(Option '$opt' may not be type '@{[ ref || '(SCALAR)' ]}'));
+
+        push @options, $opt => $_;
+    }
+
+    @options;
+}
+
+
+my %OPTIONS;
 
 sub import {
     shift;
 
-    %OPTIONS= ( out => *STDERR, validate USE_OPTIONS, @_ );
+    %OPTIONS= (
+        validate(USE_OPTIONS, out => *STDERR, delims => 'auto', color => 'auto', lc => 'bold', vc => 'red on_grey23'),     # defaults
+        validate(USE_OPTIONS, @_)
+    );
 
     my $bug= 'bug';
 
@@ -60,7 +135,7 @@ sub import {
         $bug= $OPTIONS{bug} or return;
 
         # Export bug under a different name.
-        $bug=~/^ ( [a-z]\w* | _\w+ ) $/nix or croak qq(Illegal characters in 'bug' override subroutine name '$bug');
+        $bug=~/^ (?: [a-z]\w* | _\w+ ) $/ix or croak qq(Illegal characters in 'bug' replacement subroutine name '$bug');
         delete $OPTIONS{bug};
     }
 
@@ -76,21 +151,17 @@ sub import {
 
 # To preserve list context, use form: (bug 'list')= ( some list );
 
-sub bug :lvalue {   # ($label= '', key/val paired options)
-    # Pop an even number of key/val pairs from tail of list to init object.
-    my $self= bless { %OPTIONS, validate BUG_OPTIONS, splice @_, @_ & 1 }, __PACKAGE__;
-
-    # Get sigil/label string, if there is one.
-    $self->{label}= shift // '';
-    $self->{sigil}= $self->{label}=~s{^[@%]?}{} && $&;
+sub bug :lvalue {   # ('label[:flags]', key/val paired options)
+    # Create object and populate it with specified options.
+    my $self= bless { %OPTIONS, validate BUG_OPTIONS, @_ }, __PACKAGE__;
 
     # Get extra info to include with output.
     my %info;
 
-    @info{ qw(package filename lineno) }= caller;
+    @info{ +CALLER_INFO }= caller;
     $info{lineno}= "line $info{lineno}";
 
-    $self->{info}= join(' ', map { $self->{$_}? $info{$_} : () } qw(package filename lineno));
+    $self->{info}= join(' ', map { $self->{$_}? $info{$_} : () } CALLER_INFO);
 
     # Tie an array or scalar, for list or scalar context respectively.
     if (wantarray) {
@@ -99,7 +170,6 @@ sub bug :lvalue {   # ($label= '', key/val paired options)
         tie my @a, __PACKAGE__, $self;
         return @a;
     } else {
-        $self->{sigil} and croak qq(Sigil '$self->{sigil}' used in scalar context);
         $self->{data}= \do { my $scalar };
 
         tie my $s, __PACKAGE__, $self;
@@ -111,87 +181,461 @@ sub TIESCALAR { $_[1] }
 sub TIEARRAY  { $_[1] }
 
 sub CLEAR     { $_[0]->{data}= [] }
-sub EXTEND    { $_[0]->{count}= $_[1] }
-sub FETCH     { (@_ == 1)? $_[0]->{data}->$* : $_[0]->{data}[ $_[1] ] }
+sub EXTEND    { }
 
-sub STORE {
-    my $self=     $_[0];
-    my $sigil=    $self->{sigil};
-    my $data=     $self->{data};
+sub FETCHSIZE { scalar @{ $_[0]->{data} } }
+sub STORESIZE { }
 
-    my $isScalar= @_ == 2;                              # was STORE called for SCALAR or ARRAY?
-    my $override= exists $self->{val};
-    my $width=    (Term::Size::Perl::chars $self->{out})[0];    # If not a terminal, $width is 0
+sub FETCH     { @_ == 1?  ${ $_[0]->{data} }         :  $_[0]->{data}[ $_[1] ]         }
+sub STORE     { @_ == 2? (${ $_[0]->{data} }= $_[1]) : ($_[0]->{data}[ $_[1] ]= $_[2]) }
 
-    my sub sayVal {
-        my $x= shift;
-        my $txt;
+sub DESTROY {
+    use Term::ANSIColor;
 
-        my sub valText {
-            my $color= shift;
-            my $label= $self->{label};
-            my $info=  $self->{info};
-            my $ml=    shift? "\n" : '';
-            my $txt;
+    my $self=      $_[0];
+    my $data=      $self->{data};
+    my $delims=    $self->{delims};
+    my $color=     $self->{color};
+    my $multiline= $self->{multiline};
+    my $indices=   $self->{indices} || '';
+    my $keyval=    $self->{keyval};
+    my $override=  exists $self->{val};
+    my $isScalar=  ref($data) eq 'SCALAR';
+    my $termW=     0;
 
-            my sub cv {
-                my $txt= ref($_[0])? Data::Dumper::pp($_[0]) : $_[0];
-                # $_[0]= Data::Dumper::pp($_[0]) if ref $_[0];
-                # $color? colored($_[0], 'red on_grey23') : $_[0]
-                $color? colored($txt, 'red on_grey23') : $txt;
-            }
+    my ($ic, $lc, $vc)= @{$self}{ qw(infocolor labelcolor valcolor) };
 
-            my $items= 
-                join $ml || ' ',
+    unless ($self->{noterm}) {
+        $termW= eval { require Term::Size::Perl; (Term::Size::Perl::chars($self->{out}))[0] } || 0;
+        $@ and carp qq(Unable to load Term::Size::Perl: specify option 'noterm => 1' to suppress this warning);
+    }
+
+    my $ppSub;
+
+    if (defined $self->{pp}) {
+        eval {
+            my $pp= $self->{pp};
+            my ($ppMod)= $pp=~/^(.+)::.+$/i or die qq(Invalid pretty-printer '$pp': expected 'module::sub');
+            (my $ppPN= $ppMod)=~s{::}{/}g;
+
+            eval { require "$ppPN.pm" } or die qq(Can't load module '$ppMod': $@);
+
+            no strict 'refs';
+            defined &$pp or die qq(Invalid pretty-printer '$pp');
+            $ppSub= \&$pp;
+        } or carp $@;
+    }
+
+    $ppSub||= do { no warnings 'once'; require Data::Dumper; $Data::Dumper::Indent= 1; \&Data::Dumper::Dumper };
+
+    my $str;
+
+    my $toString= sub {
+        my $color= $_[0];
+        my $ml=    $_[1] || $multiline || $indices? "\n" : '';
+
+        my $label= $self->{label};
+        my $info=  $self->{info};
+
+        local $_;
+
+        my $cv= sub {
+            my $txt= ref $_[0]? $ppSub->($_[0]) : defined $_[0]? $_[0] : 'UNDEF';
+            $color && $vc? colored($txt, $vc) : $txt;
+        };
+
+        my $i= 0;
+
+        my $vals= 
+            join $ml || ' ',
                 map { $ml? "  $_" : $_ }    # multiline?
-                        ($override)?     ( cv $self->{val}                         )  # override value specified
-                    :   ($isScalar)?     ( cv $$data                               )  # data is scalar
-                    :   ($sigil eq '@')? ( map cv($_), @$data                      )  # data is list: output grouped
-                    :   ($sigil eq '%')? ( pairmap { cv($a).' => '.cv($b) } @$data )  # data is list of keys/value pairs: output grouped
-                    :                    ( cv $data->[$x]                          ); # data is list: output as individual items
+                      $override? ( $cv->($self->{val}) ) 
+                    : $isScalar? ( $cv->($$data) )
+                    : $keyval?   ( map { ($indices && '['.$i++.'] ').$cv->($_->[0]).' => '.$cv->($_->[1]) } _pairs($data) ) 
+                    :            ( map { ($indices && '['.$i++.'] ').$cv->($_) } @$data );
 
-            $label.= '['.($color? colored($x, 'red') : $x).']'      if defined $x;
+        $info=  $color && $ic? colored($info, $ic).': ' : "$info: " if length $info;
+        $label= $color && $lc? colored($label, $lc).'=' : "$label=" if length $label;
 
-            $info=  $color? colored($info, 'bold').': ' : "$info: " if length $info;
-            $label= $color? colored($label, 'bold').'=' : "$label=" if length $label;
+        $_.= $info.$label;
+        $_.= $delims || defined($delims) && ($ml || ! $color || length($vals) == 0)? "($ml$vals$ml)" : "$ml$vals$ml";
+        $_;
+    };
 
-            $txt.= $info.$label;
-            $txt.= ($ml or not $color)? "($ml$items$ml)" : "$ml$items$ml";
-        }
+    # $str= $toString->(defined($color) and not $termW);
+    $str= $toString->($color and not $termW);
+    $str= $toString->(defined($color), $termW < length $str) if $termW;
 
-        $txt= valText;                                      # get plain text
-        $txt= valText(1, length($txt) > $width) if $width;  # get colored terminal text, accounting for width
-
-        say { $self->{out} } $txt;
-    }
-
-    if ($isScalar)
-    {
-        $$data= $_[1];
-        sayVal;
-    } else {
-        my $x=       $_[1];
-        $data->[$x]= $_[2];
-
-        ($sigil or $override)
-        ?   --$self->{count} == 0 && sayVal
-        :   sayVal($x);
-    }
+    print { $self->{out} } $str."\n";
 }
 
 
 # Catch if user code attempts to use this like a regular object.
 sub AUTOLOAD {
     our $AUTOLOAD;
-    die qq(Attempt to call unneeded non-existent subroutine '$AUTOLOAD': class @{[ __PACKAGE__ ]} intended for inline logging only);
+    croak qq(Attempt to call unneeded non-existent subroutine '$AUTOLOAD': class @{[ __PACKAGE__ ]} intended for inline logging only);
 }
 
-# Prevent AUTOLOAD from getting called for DESTROY.
-sub DESTROY { }
+
+
+# Implemented. Keeping comment because it's a good use example.
+
+# IDEA:
+#   NOW:
+#   subname($sub)=~/^.+(?=::)/
+#   ?   do { say "\$&=($&)"; *{ $caller.'::'.$name }= \&{ $&.'::'.$name } }
+#   :   carp qq(Unable to get package name from anonymous sub "@{[ subname($sub) ]}");
+#
+#   INSTEAD, let bug output something other than expression value (while still passing that through); convenient for flow:
+#   subname($sub)=~/^.+(?=::)/
+#   ?   bug(val => $&)= *{ $caller.'::'.$name }= \&{ $&.'::'.$name }
+#   :   carp qq(Unable to get package name from anonymous sub "@{[ subname($sub) ]}");
 
 
 
 1;
+
+__END__
+
+=encoding UTF-8
+
+=head1 NAME
+
+Devel::Bug - Transparent inline debugging probe
+
+=head1 SYNOPSIS
+
+    use Devel::Bug;                           # output to STDERR
+    use Devel::Bug out => *STDOUT;            # redirect output
+    use Devel::Bug ':pfl';                    # package + filename + lineno by default
+    use Devel::Bug ':pfl', out => *STDOUT;    # label:flags with options
+    use Devel::Bug bug => 'dbg';              # export under a different name
+
+    # Scalar: value passes through; appears on STDERR (no label)
+    my $result = bug = substr($str, $offset);
+    # OUTPUT: (value)
+
+    # Inline in any expression
+    my $path = $dir . '/' . (bug('label') = substr($str, $offset));
+    # OUTPUT: label=(images/logo.png)
+
+    # List: parens around bug() are required to force list-context assignment
+    my @items = (bug 'items') = get_items();
+    # OUTPUT: items=(foo bar baz)
+
+    # Flags in the label string
+    my @items = (bug 'items:@')  = get_items();   # [N] index prefixes
+    my %hash  = (bug 'data:%')   = get_pairs();   # key => value format
+    my %hash  = (bug 'data:@%')  = get_pairs();   # both
+    my @items = (bug 'items:m')  = get_items();   # multiline
+
+    # Per-call options
+    my $x = (bug 'result', vc => 'green') = compute();
+
+=head1 DESCRIPTION
+
+C<Devel::Bug> exports C<bug()>, named for the wiretap sense of the word:
+plant it inline inside any existing assignment to tap into values as they
+flow through your code.
+The value(s) assigned I<through> C<bug()> will reach the left-hand side unmodified;
+the only side effect is output to the configured filehandle.
+I<For list assignments>, C<bug()> must be I<wrapped in parentheses> to force list context:
+C<(bug ...) = list_expr()>. Without them C<bug>
+is called in scalar context and captures only a single value.
+
+Output format:
+
+    label=(value)               # scalar
+    label=(v1 v2 v3)            # list
+    label=(a => 1 b => 2)       # keyval
+    pkg file line: label=(...)  # with caller info enabled
+
+By default, ANSI colors are applied when the output handle is a terminal,
+and multiline layout is applied automatically when output would overflow the
+terminal width.
+Both behaviors are configurable; see C<color>, C<delims>, and C<noterm>.
+
+=head1 IMPORT AND CALL OPTIONS
+
+Options apply in two contexts: as import-time defaults via C<use> or
+C<import()>, and as per-call overrides passed directly to C<bug()>.
+
+    use Devel::Bug out => *STDOUT, lineno => 1;       # import-time defaults
+    my $x = (bug 'result', vc => 'green') = ...;      # per-call override
+
+Options follow an optional label:flags string as key/value pairs
+(see L</LABEL:FLAGS SYNTAX>).
+The C<bug> option (export name) is only valid at import time.
+
+=head2 Output
+
+=over 4
+
+=item B<out> (aliases: B<output>, B<o>)
+
+Filehandle to print to.
+Accepts anything C<print> accepts as an indirect filehandle:
+typeglobs, lexical filehandles, and filehandle objects.
+Default: C<*STDERR>.
+
+    use Devel::Bug out => *STDOUT;    # typeglob
+    use Devel::Bug out => $fh;        # lexical filehandle or object
+
+=back
+
+=head2 Caller information
+
+When enabled, the corresponding field is prepended to every line of output.
+
+=over 4
+
+=item B<package> (aliases: B<pkg>, B<p>)
+
+Calling package name.
+
+=item B<filename> (aliases: B<fn>, B<f>)
+
+Source filename.
+
+=item B<lineno> (aliases: B<line>, B<ln>, B<l>)
+
+Source line number.
+
+=back
+
+=head2 Display
+
+=over 4
+
+=item B<multiline> (aliases: B<ml>, B<m>)
+
+Print each value on its own indented line.
+
+=item B<indices> (aliases: B<indexes>, B<index>, B<i>, B<@>)
+
+Prefix each list element with C<[N]>. Implies multiline.
+
+=item B<keyval> (aliases: B<kv>, B<k>, B<%>)
+
+Treat the list as alternating key/value pairs and format each as
+C<< key => value >>.
+Combine with C<indices>/C<@> to add C<[N]> prefixes;
+the index counts pairs, not individual elements.
+
+=item B<delims> (aliases: B<delimiters>, B<d>)
+
+Controls whether the value is wrapped in parentheses.
+Three states:
+
+=over 4
+
+=item ON (C<1> or C<'on'>)
+
+Always wrap in parentheses.
+
+=item OFF (C<undef> or C<'off'>)
+
+Never wrap in parentheses.
+
+=item AUTO (C<''> or C<'auto'>, default)
+
+Wrap when output is not colored; omit when colored
+(color already delineates the value visually).
+
+=back
+
+=back
+
+=head2 Colors
+
+=over 4
+
+=item B<color>
+
+Controls when ANSI colors are applied.
+Three states:
+
+=over 4
+
+=item ON (C<1> or C<'on'>)
+
+Always apply colors, even to non-terminal output.
+
+=item OFF (C<undef> or C<'off'>)
+
+Never apply colors.
+
+=item AUTO (C<''> or C<'auto'>, default)
+
+Apply colors only when the output handle is a terminal.
+
+=back
+
+=item B<infocolor> (alias: B<ic>)
+
+L<Term::ANSIColor> color specification for the caller-info prefix,
+e.g. C<'bold'>, C<'cyan on_black'>.
+
+=item B<labelcolor> (alias: B<lc>)
+
+Color specification for the label. Default: C<'bold'>.
+
+=item B<valcolor> (aliases: B<vc>, B<valuecolor>)
+
+Color specification for values. Default: C<'red on_grey23'>.
+
+=back
+
+=head2 Terminal detection
+
+=over 4
+
+=item B<noterm> (aliases: B<noterminal>, B<n>)
+
+Disable terminal width detection.
+When set, L<Term::Size::Perl> is never loaded, making it an optional
+dependency.
+With C<noterm> enabled, terminal-width-based multiline layout is suppressed,
+and C<color =E<gt> ''> (AUTO) behaves as if the output is not a terminal.
+
+A warning is issued if terminal detection is attempted but
+L<Term::Size::Perl> cannot be loaded.
+Set C<noterm> to suppress both the detection and the warning.
+
+=back
+
+=head2 Pretty-printer
+
+=over 4
+
+=item B<pp>
+
+Fully-qualified name of the function used to format reference values,
+in the form C<'Module::Name::function'>.
+The function is called with the reference as its first argument and
+must return a string.
+The module is loaded automatically on first use.
+If the specified module cannot be loaded or the named sub does not exist,
+a warning is issued and the default is used instead.
+
+Default: C<'Data::Dumper::Dumper'>.
+
+    use Devel::Bug pp => 'Data::Dump::pp';          # import-time default
+    my $x = (bug 'data', pp => 'Data::Dump::pp') = get_data();  # per-call
+
+=back
+
+=head2 Alternative display value
+
+=over 4
+
+=item B<val> (aliases: B<value>, B<v>, B<override>)
+
+Display a different value in the output than the one being assigned.
+The actual assigned value still passes through unchanged.
+
+Use this when the assigned value is opaque or uninteresting, but a
+related value at the same point in the code is more informative.
+Particularly useful in ternary expressions, where the probe fires only
+when that branch is taken.
+
+    # Without bug(): a do {} block is needed to log and still return a value
+    my $installed =
+        $sub =~ /^(.+)::/
+        ?   do {
+                say "package=($1)";
+                *{ $caller . '::' . $name }= \&{ $sub }
+            }
+        :   carp "Cannot determine package from '$sub'";
+
+    # With bug(): val => $1 is displayed; the glob assignment passes through
+    my $installed =
+        $sub =~ /^(.+)::/
+        ?   bug('package', val => $1)=
+                *{ $caller . '::' . $name }= \&{ $sub }
+        :   carp "Cannot determine package from '$sub'";
+
+=back
+
+=head2 Export name
+
+=over 4
+
+=item B<bug>
+
+Rename or suppress the exported function.
+
+    use Devel::Bug bug => 'tap';   # exports as tap()
+    use Devel::Bug bug => '';      # suppresses export  ('', 0, undef all work)
+
+The name must be a valid Perl identifier (C</^[a-z]\w*$/i> or C</^_\w+$/>).
+This option is only valid at import time; it may not be passed to C<bug()>.
+
+=back
+
+=head1 LABEL:FLAGS SYNTAX
+
+A label:flags string may optionally appear as the I<first> argument to C<bug()> or C<use> (C<import()>).
+
+The string has the form C<label:flags>, where both parts are optional.
+A leading colon means an empty label; the characters after the colon
+each enable a boolean option by its single-char alias.
+
+    use Devel::Bug ':pfl';            # empty label, flags p, f, l
+    use Devel::Bug 'app:pf';          # label 'app', flags p, f
+    use Devel::Bug 'app';             # label 'app', no flags
+
+    my @r = (bug 'data:@%') = ...;   # label 'data', flags @ and %
+    my @r = (bug ':m')      = ...;   # empty label, flag m
+
+Flag characters:
+
+    @   i   indices      %   k   keyval       m   multiline
+    p       package      f       filename     l   lineno
+    d       delims       n       noterm
+
+=head1 CHAINING
+
+Bug probes can be placed at different points in a pipeline to capture
+each intermediate value independently.
+
+    my @data = (1, 2, 3, 4, 5, 6);
+    my @doubled =
+        (bug 'doubled')=      # parens make this a list assignment; bug() passes the whole list through
+        map  { $_ * 2 }
+        (bug 'evens')=        # parens force list context; without them bug() captures only one value
+        grep { $_ % 2 == 0 } @data;
+
+    # OUTPUT:
+    # doubled=(4 8 12)
+    # evens=(2 4 6)
+
+C<'evens'> captures the elements that passed the grep; C<'doubled'> captures
+those elements after multiplication.
+Output fires left-to-right as Perl frees temporaries at end-of-statement,
+which is the reverse of data flow - hence C<'doubled'> prints before C<'evens'>.
+
+=head1 DEPENDENCIES
+
+L<Term::ANSIColor>, L<Data::Dumper>.
+
+L<Term::Size::Perl> is used for terminal width detection and is loaded
+on demand. It is not required when C<noterm> is set.
+
+L<Data::Dump> and other pretty-printer modules are optional;
+see the C<pp> option.
+
+=head1 AUTHOR
+
+Kevin Shea
+
+=head1 LICENSE
+
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself.
+
+=cut
+
 
 # Implemented. Keeping comment because it's a good use example.
 

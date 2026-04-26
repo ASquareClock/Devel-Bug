@@ -15,18 +15,18 @@ use open IO => ':utf8', ':std';
 # use Data::Dump qw(pp);
 
 
-use Devel::Bug out => *STDOUT, lineno => 1;
+use Devel::Bug ':l', out => *STDOUT;
 
 say "=== Scalar Test ===";
 my $result= (my $in= bug('scalar-test')= (100 - 3)) + 7;
 say "Final scalar result: $result";
 
 say "\n=== Simple List Test ===";
-my @nums= (bug '@grouped-list-test')= (bug filename => 1)= (10, 20, 30, 40);
+my @nums= (bug 'grouped-list-test')= (bug ':fi')= (10, 20, 30, 40);
 say "List length: ", scalar @nums;
 
 say "\n=== Key/Value List Test ===";
-my %hash= (bug '%pairs-test')= (alpha => 1, beta => 2, gamma => 3, delta => 4);
+my %hash= (bug 'pairs-test:@%')= (alpha => 1, beta => 2, gamma => 3, delta => 4);
 say "Hash has ", scalar(keys %hash), " keys";
 
 
