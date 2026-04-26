@@ -15,7 +15,7 @@ use open IO => ':utf8', ':std';
 # use Data::Dump qw(pp);
 
 
-use Devel::Bug out => *STDOUT, lineno => 1;
+use Devel::Bug ':l', out => *STDOUT;
 
 say "=== Scalar Test ===";
 my $result= (my $in= bug('scalar-test')= (100 - 3)) + 7;

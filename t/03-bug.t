@@ -6,7 +6,7 @@ use utf8;
 
 use Test2::V0;
 
-# Set up in-memory capture via a typeglob filehandle (required by out's type check).
+# Set up in-memory capture via a typeglob filehandle.
 our $buf;
 open *TESTOUT, '>', \$buf or die "Cannot open capture buffer: $!";
 
@@ -210,6 +210,21 @@ sub bug :lvalue;  # forward declaration: tells parser bug() is an lvalue sub
     my $in;
     ($in = bug('fnd') = 1);
     like $buf, qr/bug\.t/, 'source filename in output when filename => 1';
+}
+
+# ---------------------------------------------------------------------------
+# 17. Lexical filehandle works as output handle
+# ---------------------------------------------------------------------------
+
+{
+    my $lex_buf;
+    open my $fh, '>', \$lex_buf or die "Cannot open: $!";
+    Devel::Bug->import(out => $fh);
+    my $in;
+    ($in = bug('lex_fh') = 77);
+    is   $in,  77,              'value passes through with lexical filehandle';
+    like $lex_buf, qr/lex_fh/, 'output goes to lexical filehandle';
+    like $lex_buf, qr/77/,     'value appears in lexical filehandle output';
 }
 
 done_testing;

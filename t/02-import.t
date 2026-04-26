@@ -48,6 +48,8 @@ ok !defined &T::SuppressEmpty::bug, 'export suppressed with bug => ""';
 # Output
 ok lives { Devel::Bug->import(output => *STDERR)               }, "alias 'output' (=> out) accepted";
 ok lives { Devel::Bug->import(o      => *STDERR)               }, "alias 'o' (=> out) accepted";
+ok lives { my $b; open my $fh, '>', \$b; Devel::Bug->import(out => $fh) },
+    'lexical filehandle accepted as out';
 
 # Colors
 ok lives { Devel::Bug->import(out => *STDERR, ic => 'bold')    }, "alias 'ic' (=> infocolor) accepted";
@@ -100,13 +102,23 @@ like(
 );
 
 # ---------------------------------------------------------------------------
-# 8. Odd number of options causes error
+# 8. Invalid flag in colon-flag string causes error
 # ---------------------------------------------------------------------------
 
 like(
-    dies { Devel::Bug->import('orphan') },
-    qr/Odd number/,
-    'odd number of options causes error',
+    dies { Devel::Bug->import(':q') },
+    qr/Unknown option/,
+    'invalid flag causes error',
 );
+
+# ---------------------------------------------------------------------------
+# 9. Import-time colon-flag string accepted
+# ---------------------------------------------------------------------------
+
+ok lives { Devel::Bug->import(':p')                    }, "import-time ':p' flag accepted";
+ok lives { Devel::Bug->import(':fi')                   }, "import-time ':fi' flags accepted";
+ok lives { Devel::Bug->import(':p', out => *STDERR)    }, "import-time flag with option accepted";
+ok lives { Devel::Bug->import('default_label')         }, 'import-time label accepted';
+ok lives { Devel::Bug->import('default_label:fi')      }, 'import-time label with flags accepted';
 
 done_testing;
