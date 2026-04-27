@@ -11,68 +11,48 @@ use warnings;
 
 use Carp qw(croak carp);
 
-# use Data::Dump qw(pp);
+use Data::Dump 'pp'; # debugging
 
 
 use constant BUG_OPTIONS => {
-    label       => '',
-    noterm      => '',
-    out         => '*',
-    delims      => '+',
-    color       => '+',
-    infocolor   => '',
-    labelcolor  => '',
-    valcolor    => '',
-    multiline   => '',
-    indices     => '',
-    keyval      => '',
-    package     => '',
-    filename    => '',
-    lineno      => '',
-    val         => '*',
-    pp          => '',
-};
-
-use constant ALIAS_OPTIONS => {
-    n           => 'noterm',
-    noterminal  => 'noterm',
-    output      => 'out',
-    o           => 'out',
-    delimiters  => 'delims',
-    d           => 'delims',
-    ic          => 'infocolor',
-    lc          => 'labelcolor',
-    vc          => 'valcolor',
-    valuecolor  => 'valcolor',
-    ml          => 'multiline',
-    m           => 'multiline',
-    indexes     => 'indices',
-    index       => 'indices',
-    i           => 'indices',
-    '@'         => 'indices',
-    kv          => 'keyval',
-    k           => 'keyval',
-    '%'         => 'keyval',
-    pkg         => 'package',
-    p           => 'package',
-    fn          => 'filename',
-    f           => 'filename',
-    line        => 'lineno',
-    ln          => 'lineno',
-    l           => 'lineno',
-    value       => 'val',
-    v           => 'val',
-    override    => 'val',
+    label      => [ ''                         ],
+    noterm     => [ '',  qw(n noterminal)      ],
+    out        => [ '*', qw(o output)          ],
+    delims     => [ '+', qw(d delimiters)      ],
+    color      => [ '+'                        ],
+    infocolor  => [ '',  qw(ic)                ],
+    labelcolor => [ '',  qw(lc)                ],
+    valcolor   => [ '',  qw(vc valuecolor)     ],
+    multiline  => [ '',  qw(m ml)              ],
+    indices    => [ '',  qw(i @ index indexes) ],
+    keyval     => [ '',  qw(k kv %)            ],
+    package    => [ '',  qw(p pkg)             ],
+    filename   => [ '',  qw(f fn)              ],
+    lineno     => [ '',  qw(l ln line)         ],
+    val        => [ '*', qw(v value override)  ],
+    pp         => [ ''                         ],
 };
 
 use constant USE_OPTIONS => {
     %{ +BUG_OPTIONS },
-    bug => '',
+    bug => [ '' ],
+};
+
+use constant OPTION_ALIASES => do {
+    my $h= {};
+
+    foreach my $opt (keys %{ +USE_OPTIONS }) {
+        my $spec= USE_OPTIONS->{$opt};
+        $h->{$_}= $opt foreach @{$spec}[1..$#$spec];
+    }
+
+    $h;
 };
 
 use constant CALLER_INFO => qw(package filename lineno);
 
 
+# Takes an ARRAY REF and return a list of ARRAY refs of pairs of elements.
 sub _pairs {
     my $array= shift;
     my @list;
@@ -85,6 +65,7 @@ sub _pairs {
 }
 
 
+# Validate options according to provided definitions.
 sub validate {
     my $optDefs= shift;
 
@@ -100,16 +81,19 @@ sub validate {
     my @options;
 
     foreach (_pairs \@_) {
-        my $opt= lc $_->[0];
+        my $opt= lc $_->[0];    # option names are case insensitive
         local $_= $_->[1];
 
-        $opt= ALIAS_OPTIONS->{$opt} if exists ALIAS_OPTIONS->{$opt};
+        # Convert an alias option name to its primary name.
+        $opt= OPTION_ALIASES->{$opt} if exists OPTION_ALIASES->{$opt};
 
+        # Confirm option name actually exists.
         exists $optDefs->{$opt} or croak qq(Unknown option '$opt');
 
-        $optDefs->{$opt} eq '+'
+        # Confirm and process option values and their types.
+        $optDefs->{$opt}[0] eq '+'
         ?   (defined and $_= m{^(?:on|1)$}i? 1 : m{^(?:auto|)$}i? '' : m{^off$}i? undef : croak qq(Illegal option value: $opt => '$_'))
-        :   ($optDefs->{$opt} eq '*' or $optDefs->{$opt} eq ref or croak qq(Option '$opt' may not be type '@{[ ref || '(SCALAR)' ]}'));
+        :   ($optDefs->{$opt}[0] eq '*' or $optDefs->{$opt}[0] eq ref or croak qq(Option '$opt' may not be type '@{[ ref || '(SCALAR)' ]}'));
 
         push @options, $opt => $_;
     }
@@ -128,17 +112,20 @@ sub import {
         validate(USE_OPTIONS, @_)
     );
 
+    # Default name under which to export bug().
     my $bug= 'bug';
 
+    # Caller may export bug() under a different name or suppress export.
     if (exists $OPTIONS{bug}) {
         # Don't export anything if explicity set to falsy.
         $bug= $OPTIONS{bug} or return;
 
-        # Export bug under a different name.
+        # Export bug() under a different name.
         $bug=~/^ (?: [a-z]\w* | _\w+ ) $/ix or croak qq(Illegal characters in 'bug' replacement subroutine name '$bug');
         delete $OPTIONS{bug};
     }
 
+    # Export bug().
     no strict 'refs';
     *{ caller.'::'.$bug }= \&bug;
 }
@@ -192,80 +179,90 @@ sub STORE     { @_ == 2? (${ $_[0]->{data} }= $_[1]) : ($_[0]->{data}[ $_[1] ]= 
 sub DESTROY {
     use Term::ANSIColor;
 
-    my $self=      $_[0];
-    my $data=      $self->{data};
-    my $delims=    $self->{delims};
-    my $color=     $self->{color};
-    my $multiline= $self->{multiline};
-    my $indices=   $self->{indices} || '';
-    my $keyval=    $self->{keyval};
-    my $override=  exists $self->{val};
-    my $isScalar=  ref($data) eq 'SCALAR';
-    my $termW=     0;
+    my $self= $_[0];
+    my $override= exists $self->{val};
 
-    my ($ic, $lc, $vc)= @{$self}{ qw(infocolor labelcolor valcolor) };
+    my ($data, $delims, $color, $multiline, $indices, $keyval, $ic, $lc, $vc)=
+        @{$self}{ qw(data delims color multiline indices keyval infocolor labelcolor valcolor) };
 
+    my $isScalar= ref($data) eq 'SCALAR';
+    my $termW= 0;
+
+    $indices||= '';
+
+    # Get terminal width if requested and possible.
     unless ($self->{noterm}) {
         $termW= eval { require Term::Size::Perl; (Term::Size::Perl::chars($self->{out}))[0] } || 0;
         $@ and carp qq(Unable to load Term::Size::Perl: specify option 'noterm => 1' to suppress this warning);
     }
 
+    # Get the pretty printer sub.
     my $ppSub;
 
     if (defined $self->{pp}) {
         eval {
+            # Caller specified sub in Module::sub form.
             my $pp= $self->{pp};
-            my ($ppMod)= $pp=~/^(.+)::.+$/i or die qq(Invalid pretty-printer '$pp': expected 'module::sub');
-            (my $ppPN= $ppMod)=~s{::}{/}g;
+            my ($ppMod)= $pp=~/^(.+)::.+$/i or die qq(Invalid pretty-printer '$pp': expected 'Module::sub');
+            (my $ppPN= $ppMod)=~s{::}{/}g;  # get module name with slashes for require
 
+            # Load the module.
             eval { require "$ppPN.pm" } or die qq(Can't load module '$ppMod': $@);
 
+            # Confirm sub callable and save ref to it.
             no strict 'refs';
             defined &$pp or die qq(Invalid pretty-printer '$pp');
             $ppSub= \&$pp;
         } or carp $@;
     }
 
+    # If no pretty printer specified or loading it didn't work, load default.
     $ppSub||= do { no warnings 'once'; require Data::Dumper; $Data::Dumper::Indent= 1; \&Data::Dumper::Dumper };
 
+    # Make a string representation of the data.
     my $str;
 
     my $toString= sub {
-        my $color= $_[0];
-        my $ml=    $_[1] || $multiline || $indices? "\n" : '';
+        my $color= $_[0];   # color the text with ANSI colors?
+        my $ml=    $_[1] || $multiline || $indices? "\n" : '';  # multiline?
 
         my $label= $self->{label};
         my $info=  $self->{info};
 
         local $_;
 
+        # Return a string representation of the value, coloring if needed.
         my $cv= sub {
             my $txt= ref $_[0]? $ppSub->($_[0]) : defined $_[0]? $_[0] : 'UNDEF';
-            $color && $vc? colored($txt, $vc) : $txt;
+            ($color and $vc)? colored($txt, $vc) : $txt;
         };
 
+        # Make a string representation of the data.
         my $i= 0;
 
-        my $vals= 
+        my $vals=
+            $ml.(
             join $ml || ' ',
                 map { $ml? "  $_" : $_ }    # multiline?
-                      $override? ( $cv->($self->{val}) ) 
-                    : $isScalar? ( $cv->($$data) )
-                    : $keyval?   ( map { ($indices && '['.$i++.'] ').$cv->($_->[0]).' => '.$cv->($_->[1]) } _pairs($data) ) 
-                    :            ( map { ($indices && '['.$i++.'] ').$cv->($_) } @$data );
+                      $override? ( $cv->($self->{val}) )                                                    # vals => ... override used
+                    : $isScalar? ( $cv->($$data) )                                                          # single scalar
+                    : $keyval?   ( map { ($indices && $i++.': ').$cv->($_->[0]).' => '.$cv->($_->[1]) } _pairs($data) ) # list of key/val pairs
+                    :            ( map { ($indices && $i++.': ').$cv->($_) } @$data )                       # list
+            ).$ml;
 
-        $info=  $color && $ic? colored($info, $ic).': ' : "$info: " if length $info;
-        $label= $color && $lc? colored($label, $lc).'=' : "$label=" if length $label;
+        # Format info, label and vals, coloring if needed.
+        $info=  ($color and $ic)? colored($info, $ic).': ' : "$info: " if length $info;
+        $label= ($color and $lc)? colored($label, $lc).'=' : "$label=" if length $label;
+        $vals=  '('.$vals.')' if $delims or defined($delims) and ($ml or not $color or length($vals) == 0);
 
-        $_.= $info.$label;
-        $_.= $delims || defined($delims) && ($ml || ! $color || length($vals) == 0)? "($ml$vals$ml)" : "$ml$vals$ml";
-        $_;
+        $info.$label.$vals;
     };
 
-    # $str= $toString->(defined($color) and not $termW);
+    # Call toString once for possible sizing, then again if necessary for coloring and/or wrapping.
     $str= $toString->($color and not $termW);
     $str= $toString->(defined($color), $termW < length $str) if $termW;
 
+    # Ouput the string.
     print { $self->{out} } $str."\n";
 }
 
@@ -429,15 +426,15 @@ Three states:
 
 =over 4
 
-=item ON (C<1> or C<'on'>)
+=item C<on> (also C<1>)
 
 Always wrap in parentheses.
 
-=item OFF (C<undef> or C<'off'>)
+=item C<off> (also C<undef>)
 
 Never wrap in parentheses.
 
-=item AUTO (C<''> or C<'auto'>, default)
+=item C<auto> (also C<''>, default)
 
 Wrap when output is not colored; omit when colored
 (color already delineates the value visually).
@@ -457,15 +454,15 @@ Three states:
 
 =over 4
 
-=item ON (C<1> or C<'on'>)
+=item C<on> (also C<1>)
 
 Always apply colors, even to non-terminal output.
 
-=item OFF (C<undef> or C<'off'>)
+=item C<off> (also C<undef>)
 
 Never apply colors.
 
-=item AUTO (C<''> or C<'auto'>, default)
+=item C<auto> (also C<''>, default)
 
 Apply colors only when the output handle is a terminal.
 
@@ -496,7 +493,7 @@ Disable terminal width detection.
 When set, L<Term::Size::Perl> is never loaded, making it an optional
 dependency.
 With C<noterm> enabled, terminal-width-based multiline layout is suppressed,
-and C<color =E<gt> ''> (AUTO) behaves as if the output is not a terminal.
+and C<color =E<gt> 'auto'> behaves as if the output is not a terminal.
 
 A warning is issued if terminal detection is attempted but
 L<Term::Size::Perl> cannot be loaded.

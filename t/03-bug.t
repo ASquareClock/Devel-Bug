@@ -101,8 +101,8 @@ sub bug :lvalue;  # forward declaration: tells parser bug() is an lvalue sub
     reset_capture();
     my @result = (bug 'indexed:@') = ('a', 'b', 'c');
     is   \@result, ['a', 'b', 'c'], 'list passes through with indices flag';
-    like $buf,     qr/\[0\]/,       'index 0 in output';
-    like $buf,     qr/\[2\]/,       'index 2 in output';
+    like $buf,     qr/0: /,          'index 0 in output';
+    like $buf,     qr/2: /,          'index 2 in output';
 }
 
 # ---------------------------------------------------------------------------
@@ -124,7 +124,7 @@ sub bug :lvalue;  # forward declaration: tells parser bug() is an lvalue sub
     reset_capture();
     my %result = (bug 'ipairs:@%') = (x => 10, y => 20);
     is   \%result, {x => 10, y => 20}, 'indexed key-value pairs pass through';
-    like $buf,     qr/\[0\]/,          'index in indexed key-value output';
+    like $buf,     qr/0: /,             'index in indexed key-value output';
     like $buf,     qr/x =>/,           'key-value format in indexed output';
 }
 
