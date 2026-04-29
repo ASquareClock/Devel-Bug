@@ -11,8 +11,6 @@ use warnings;
 
 use Carp qw(croak carp);
 
-use Data::Dump 'pp'; # debugging
-
 
 use constant BUG_OPTIONS => {
     label      => [ ''                         ],
@@ -277,22 +275,6 @@ sub STORESIZE { }
 
 
 
-
-# Implemented. Keeping comment because it's a good use example.
-
-# IDEA:
-#   NOW:
-#   subname($sub)=~/^.+(?=::)/
-#   ?   do { say "\$&=($&)"; *{ $caller.'::'.$name }= \&{ $&.'::'.$name } }
-#   :   carp qq(Unable to get package name from anonymous sub "@{[ subname($sub) ]}");
-#
-#   INSTEAD, let bug output something other than expression value (while still passing that through); convenient for flow:
-#   subname($sub)=~/^.+(?=::)/
-#   ?   bug(val => $&)= *{ $caller.'::'.$name }= \&{ $&.'::'.$name }
-#   :   carp qq(Unable to get package name from anonymous sub "@{[ subname($sub) ]}");
-
-
-
 1;
 
 __END__
@@ -420,7 +402,7 @@ Prefix each list element with C<N:>. Implies multiline.
 Treat the list as alternating key/value pairs and format each as
 C<< key => value >>.
 Combine with C<indices>/C<@> to add C<N:> prefixes;
-the index counts pairs, not individual elements.
+the index counts pairs, not individual elements. Implies multiline.
 
 =item B<delims> (aliases: B<delimiters>, B<d>)
 
@@ -474,7 +456,7 @@ Apply colors only when the output handle is a terminal.
 =item B<infocolor> (alias: B<ic>)
 
 L<Term::ANSIColor> color specification for the caller-info prefix,
-e.g. C<'bold'>, C<'cyan on_black'>.
+e.g. C<'bold'>, C<'cyan on_black'>. Default: none.
 
 =item B<labelcolor> (alias: B<lc>)
 
@@ -543,7 +525,7 @@ when that branch is taken.
     my $installed =
         $sub =~ /^(.+)::/
         ?   do {
-                say "package=($1)";
+                print "package=($1)\n";
                 *{ $caller . '::' . $name }= \&{ $sub }
             }
         :   carp "Cannot determine package from '$sub'";
@@ -642,7 +624,7 @@ it under the same terms as Perl itself.
 # IDEA:
 #   NOW:
 #   subname($sub)=~/^.+(?=::)/
-#   ?   do { say "\$&=($&)"; *{ $caller.'::'.$name }= \&{ $&.'::'.$name } }
+#   ?   do { print "\$&=($&)\n"; *{ $caller.'::'.$name }= \&{ $&.'::'.$name } }
 #   :   carp qq(Unable to get package name from anonymous sub "@{[ subname($sub) ]}");
 #
 #   INSTEAD, let bug output something other than expression value (while still passing that through); convenient for flow:

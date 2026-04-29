@@ -1,0 +1,39 @@
+use ExtUtils::MakeMaker;
+
+WriteMakefile(
+    NAME             => 'Devel::Bug',
+    AUTHOR           => 'Kevin Shea <PAUSEID@cpan.org>',
+    VERSION_FROM     => 'lib/Devel/Bug.pm',
+    ABSTRACT_FROM    => 'lib/Devel/Bug.pm',
+    LICENSE          => 'perl_5',
+    MIN_PERL_VERSION => '5.008',
+
+    PREREQ_PM => {
+        'Carp'            => 0,
+        'Data::Dumper'    => 0,
+        'Term::ANSIColor' => 0,
+    },
+
+    TEST_REQUIRES => {
+        'Test2::V0' => 0,
+    },
+
+    CONFIGURE_REQUIRES => {
+        'ExtUtils::MakeMaker' => 0,
+    },
+
+    META_MERGE => {
+        'meta-spec' => { version => 2 },
+        prereqs => {
+            runtime => {
+                suggests => {
+                    'Data::Dump'       => 0,
+                    'Term::Size::Perl' => 0,
+                },
+            },
+        },
+    },
+
+    dist  => { COMPRESS => 'gzip -9f', SUFFIX => 'gz' },
+    clean => { FILES => 'Devel-Bug-*' },
+);

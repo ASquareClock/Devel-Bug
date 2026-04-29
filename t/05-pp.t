@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 
-use v5.30;
+use v5.8;
 use warnings;
 use utf8;
 
