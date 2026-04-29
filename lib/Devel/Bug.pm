@@ -1,3 +1,8 @@
+# Devel::Bug - Transparent inline debugging probe (pure Perl)
+#
+# Copyright (C) 2026 Kevin Shea
+# This library is free software; you can redistribute it and/or modify
+# it under the same terms as Perl itself.
 
 package Devel::Bug;
 
@@ -283,7 +288,7 @@ __END__
 
 =head1 NAME
 
-Devel::Bug - Transparent inline debugging probe
+Devel::Bug - Transparent inline debugging probe (pure Perl)
 
 =head1 SYNOPSIS
 
