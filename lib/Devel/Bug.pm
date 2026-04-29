@@ -39,20 +39,15 @@ use constant USE_OPTIONS => {
 };
 
 use constant OPTION_ALIASES => do {
-    my $h= {};
-
-    foreach my $opt (keys %{ +USE_OPTIONS }) {
-        my $spec= USE_OPTIONS->{$opt};
-        $h->{$_}= $opt foreach @{$spec}[1..$#$spec];
-    }
-
-    $h;
+    my (%h, $opt, $spec);
+    @h{ @{$spec}[1..$#$spec] }= ($opt) x $#$spec while ($opt, $spec)= each %{ +USE_OPTIONS };
+    \%h;
 };
 
 use constant CALLER_INFO => qw(package filename lineno);
 
 
-# Takes an ARRAY REF and return a list of ARRAY refs of pairs of elements.
+# Takes an ARRAY REF and return a list of ARRAY refs of pairs of elements from it.
 sub _pairs {
     my $array= shift;
     my @list;
@@ -139,7 +134,7 @@ sub import {
 # To preserve list context, use form: (bug 'list')= ( some list );
 
 sub bug :lvalue {   # ('label[:flags]', key/val paired options)
-    # Create object and populate it with specified options.
+    # Create object and populate it with options from import and bug().
     my $self= bless { %OPTIONS, validate BUG_OPTIONS, @_ }, __PACKAGE__;
 
     # Get extra info to include with output.
@@ -148,7 +143,7 @@ sub bug :lvalue {   # ('label[:flags]', key/val paired options)
     @info{ +CALLER_INFO }= caller;
     $info{lineno}= "line $info{lineno}";
 
-    $self->{info}= join(' ', map { $self->{$_}? $info{$_} : () } CALLER_INFO);
+    $self->{info}= join(' ', map $info{$_}, grep $self->{$_}, CALLER_INFO);
 
     # Tie an array or scalar, for list or scalar context respectively.
     if (wantarray) {
@@ -164,18 +159,19 @@ sub bug :lvalue {   # ('label[:flags]', key/val paired options)
     }
 }
 
+# Just pass along self object constructed in bug(), which calls these.
 sub TIESCALAR { $_[1] }
 sub TIEARRAY  { $_[1] }
 
-sub CLEAR     { $_[0]->{data}= [] }
-sub EXTEND    { }
+# Methods for tied arrays.
+sub CLEAR     {    $_[0]->{data}= [] }
+sub FETCHSIZE { @{ $_[0]->{data} }   }
 
-sub FETCHSIZE { scalar @{ $_[0]->{data} } }
-sub STORESIZE { }
-
+# Shared methods:              SCALARs                          ARRAYs
 sub FETCH     { @_ == 1?  ${ $_[0]->{data} }         :  $_[0]->{data}[ $_[1] ]         }
 sub STORE     { @_ == 2? (${ $_[0]->{data} }= $_[1]) : ($_[0]->{data}[ $_[1] ]= $_[2]) }
 
+# Format and output captured values upon destruction of temporary tied variable.
 sub DESTROY {
     use Term::ANSIColor;
 
@@ -186,11 +182,12 @@ sub DESTROY {
         @{$self}{ qw(data delims color multiline indices keyval infocolor labelcolor valcolor) };
 
     my $isScalar= ref($data) eq 'SCALAR';
-    my $termW= 0;
 
     $indices||= '';
 
-    # Get terminal width if requested and possible.
+    # Get terminal width if requested and available.
+    my $termW= 0;
+
     unless ($self->{noterm}) {
         $termW= eval { require Term::Size::Perl; (Term::Size::Perl::chars($self->{out}))[0] } || 0;
         $@ and carp qq(Unable to load Term::Size::Perl: specify option 'noterm => 1' to suppress this warning);
@@ -203,11 +200,12 @@ sub DESTROY {
         eval {
             # Caller specified sub in Module::sub form.
             my $pp= $self->{pp};
-            my ($ppMod)= $pp=~/^(.+)::.+$/i or die qq(Invalid pretty-printer '$pp': expected 'Module::sub');
-            (my $ppPN= $ppMod)=~s{::}{/}g;  # get module name with slashes for require
+            my ($ppPN)= $pp=~/^(.+)::.+$/i or die qq(Invalid pretty-printer '$pp' specified: expected 'Module::sub' form);
+
+            $ppPN=~s{::}{/}g;  # get module path with slashes for require
 
             # Load the module.
-            eval { require "$ppPN.pm" } or die qq(Can't load module '$ppMod': $@);
+            eval { require "$ppPN.pm" } or die $@;
 
             # Confirm sub callable and save ref to it.
             no strict 'refs';
@@ -216,12 +214,10 @@ sub DESTROY {
         } or carp $@;
     }
 
-    # If no pretty printer specified or loading it didn't work, load default.
+    # If no pretty printer specified or loading it didn't work, try the default.
     $ppSub||= do { no warnings 'once'; require Data::Dumper; $Data::Dumper::Indent= 1; \&Data::Dumper::Dumper };
 
     # Make a string representation of the data.
-    my $str;
-
     my $toString= sub {
         my $color= $_[0];   # color the text with ANSI colors?
         my $ml=    $_[1] || $multiline || $indices? "\n" : '';  # multiline?
@@ -259,6 +255,8 @@ sub DESTROY {
     };
 
     # Call toString once for possible sizing, then again if necessary for coloring and/or wrapping.
+    my $str;
+
     $str= $toString->($color and not $termW);
     $str= $toString->(defined($color), $termW < length $str) if $termW;
 
@@ -272,6 +270,11 @@ sub AUTOLOAD {
     our $AUTOLOAD;
     croak qq(Attempt to call unneeded non-existent subroutine '$AUTOLOAD': class @{[ __PACKAGE__ ]} intended for inline logging only);
 }
+
+# If these get called, they need to be no-ops, since we're only using tied array for logging.
+sub EXTEND    { }
+sub STORESIZE { }
+
 
 
 
@@ -321,7 +324,7 @@ Devel::Bug - Transparent inline debugging probe
     # OUTPUT: items=(foo bar baz)
 
     # Flags in the label string
-    my @items = (bug 'items:@')  = get_items();   # [N] index prefixes
+    my @items = (bug 'items:@')  = get_items();   # N: index prefixes
     my %hash  = (bug 'data:%')   = get_pairs();   # key => value format
     my %hash  = (bug 'data:@%')  = get_pairs();   # both
     my @items = (bug 'items:m')  = get_items();   # multiline
@@ -410,13 +413,13 @@ Print each value on its own indented line.
 
 =item B<indices> (aliases: B<indexes>, B<index>, B<i>, B<@>)
 
-Prefix each list element with C<[N]>. Implies multiline.
+Prefix each list element with C<N:>. Implies multiline.
 
 =item B<keyval> (aliases: B<kv>, B<k>, B<%>)
 
 Treat the list as alternating key/value pairs and format each as
 C<< key => value >>.
-Combine with C<indices>/C<@> to add C<[N]> prefixes;
+Combine with C<indices>/C<@> to add C<N:> prefixes;
 the index counts pairs, not individual elements.
 
 =item B<delims> (aliases: B<delimiters>, B<d>)

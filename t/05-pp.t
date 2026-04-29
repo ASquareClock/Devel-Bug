@@ -121,7 +121,7 @@ my $href = {a => 1};
     local $SIG{__WARN__} = sub { $warned .= $_[0] };
     my $in;
     ($in = bug('x', pp => 'NoSuch::Module::func') = 42);
-    like $warned, qr/Can't load module/, 'nonexistent module warns';
+    like $warned, qr/Can't locate/, 'nonexistent module warns';
     like $buf,    qr/42/,                'output still produced after missing module';
 }
 
