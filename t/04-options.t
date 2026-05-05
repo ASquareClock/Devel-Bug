@@ -157,7 +157,7 @@ sub bug :lvalue;
 }
 
 # ---------------------------------------------------------------------------
-# terminal path: mock Term::Size::Perl::chars to get $termW > 0
+# terminal path: mock _isTerm + _sttyWidth to simulate terminal output
 # ---------------------------------------------------------------------------
 
 # delims=ON + terminal: parens even when color=AUTO would suppress them
@@ -165,51 +165,56 @@ sub bug :lvalue;
     Devel::Bug->import(out => *TESTOUT, color => '', vc => 'red', delims => 1);
     reset_capture();
     no warnings 'redefine';
-    local *Term::Size::Perl::chars = sub { (80, 24) };
+    local *Devel::Bug::_isTerm    = sub { 1 };
+    local *Devel::Bug::_sttyWidth = sub { 80 };
     my $in;
     ($in = bug('p') = 42);
     like $buf, qr/\(/, 'delims=ON holds on terminal regardless of color';
 }
 
-# delims=OFF + terminal: no parens even when color=AUTO would add them (plain call)
+# delims=OFF + terminal: no parens
 {
     Devel::Bug->import(out => *TESTOUT, color => undef, delims => undef);
     reset_capture();
     no warnings 'redefine';
-    local *Term::Size::Perl::chars = sub { (80, 24) };
+    local *Devel::Bug::_isTerm    = sub { 1 };
+    local *Devel::Bug::_sttyWidth = sub { 80 };
     my $in;
     ($in = bug('p') = 42);
     unlike $buf, qr/\(/, 'delims=OFF holds on terminal regardless of color';
 }
 
-# term, OFF color: both calls uncolored → no ANSI codes in output
+# color=OFF + terminal: no ANSI codes
 {
     Devel::Bug->import(out => *TESTOUT, color => undef, vc => 'red');
     reset_capture();
     no warnings 'redefine';
-    local *Term::Size::Perl::chars = sub { (80, 24) };
+    local *Devel::Bug::_isTerm    = sub { 1 };
+    local *Devel::Bug::_sttyWidth = sub { 80 };
     my $in;
     ($in = bug('c') = 42);
     unlike $buf, qr/\e\[/, 'color=OFF produces no ANSI codes on terminal';
 }
 
-# term, AUTO color: second call colored → ANSI codes in output
+# color=AUTO + terminal: ANSI codes applied
 {
     Devel::Bug->import(out => *TESTOUT, color => '', vc => 'red');
     reset_capture();
     no warnings 'redefine';
-    local *Term::Size::Perl::chars = sub { (80, 24) };
+    local *Devel::Bug::_isTerm    = sub { 1 };
+    local *Devel::Bug::_sttyWidth = sub { 80 };
     my $in;
     ($in = bug('c') = 42);
     like $buf, qr/\e\[/, 'color=AUTO produces ANSI codes on terminal';
 }
 
-# term, ON color: second call colored → ANSI codes in output
+# color=ON + terminal: ANSI codes applied
 {
     Devel::Bug->import(out => *TESTOUT, color => 1, vc => 'red');
     reset_capture();
     no warnings 'redefine';
-    local *Term::Size::Perl::chars = sub { (80, 24) };
+    local *Devel::Bug::_isTerm    = sub { 1 };
+    local *Devel::Bug::_sttyWidth = sub { 80 };
     my $in;
     ($in = bug('c') = 42);
     like $buf, qr/\e\[/, 'color=ON produces ANSI codes on terminal';
@@ -219,12 +224,13 @@ sub bug :lvalue;
 # noterm option
 # ---------------------------------------------------------------------------
 
-# baseline: color=AUTO on mocked terminal produces ANSI codes (second call fires)
+# baseline: color=AUTO on mocked terminal produces ANSI codes
 {
     Devel::Bug->import(out => *TESTOUT, color => '', vc => 'red');
     reset_capture();
     no warnings 'redefine';
-    local *Term::Size::Perl::chars = sub { (80, 24) };
+    local *Devel::Bug::_isTerm    = sub { 1 };
+    local *Devel::Bug::_sttyWidth = sub { 80 };
     my $in;
     ($in = bug('c') = 42);
     like $buf, qr/\e\[/, 'color=AUTO on terminal produces ANSI codes (baseline)';
@@ -235,7 +241,8 @@ sub bug :lvalue;
     Devel::Bug->import(out => *TESTOUT, color => '', vc => 'red', noterm => 1);
     reset_capture();
     no warnings 'redefine';
-    local *Term::Size::Perl::chars = sub { (80, 24) };
+    local *Devel::Bug::_isTerm    = sub { 1 };
+    local *Devel::Bug::_sttyWidth = sub { 80 };
     my $in;
     ($in = bug('c') = 42);
     unlike $buf, qr/\e\[/, 'noterm=1 suppresses terminal detection for color=AUTO';
@@ -251,13 +258,11 @@ sub bug :lvalue;
 }
 
 # ---------------------------------------------------------------------------
-# noterm + Term::Size::Perl unavailable
-# Simulate unavailability: delete from %INC so require tries to reload,
-# then block the reload with an @INC hook that also counts attempts.
+# terminal width detection cascade: stty → Term::Size::Perl
+# Simulate unavailability via an @INC hook that blocks Term/Size/Perl.pm.
 # ---------------------------------------------------------------------------
-
 {
-    my $attempts;
+    my $attempts = 0;
 
     my $block = sub {
         return unless $_[1] eq 'Term/Size/Perl.pm';
@@ -265,37 +270,74 @@ sub bug :lvalue;
         die "Term::Size::Perl not available\n";
     };
 
-    # noterm=1: require never reached — module not needed
+    # noterm=1: detection skipped entirely — neither stty nor Term::Size::Perl attempted
     {
+        no warnings 'redefine';
+        local *Devel::Bug::_isTerm    = sub { 1 };
+        local *Devel::Bug::_sttyWidth = sub { 0 };
         $attempts = 0;
         delete local $INC{'Term/Size/Perl.pm'};
         local @INC = ($block, @INC);
 
-        Devel::Bug->import(out => *TESTOUT, noterm => 1);
+        Devel::Bug->import(out => *TESTOUT, color => '', vc => 'red', noterm => 1);
         reset_capture();
         my $in;
-        ($in = bug('x') = 42);
-        is $attempts, 0,   'noterm=1: require not attempted';
-        like $buf,  qr/42/, 'noterm=1: output produced without Term::Size::Perl';
-        is $in, 42,         'noterm=1: value passes through';
+        ($in = bug('c') = 42);
+        is     $attempts, 0,       'noterm=1: Term::Size::Perl not attempted';
+        unlike $buf,      qr/\e\[/,'noterm=1: no colors (termW=0)';
+        is     $in,       42,      'noterm=1: value passes through';
     }
 
-    # noterm=falsy: require attempted, eval catches failure, output still produced
+    # stty works: Term::Size::Perl not attempted
     {
+        no warnings 'redefine';
+        local *Devel::Bug::_isTerm    = sub { 1 };
+        local *Devel::Bug::_sttyWidth = sub { 80 };
         $attempts = 0;
         delete local $INC{'Term/Size/Perl.pm'};
         local @INC = ($block, @INC);
 
-        Devel::Bug->import(out => *TESTOUT);
+        Devel::Bug->import(out => *TESTOUT, color => '', vc => 'red');
+        reset_capture();
+        my $in;
+        ($in = bug('c') = 42);
+        is   $attempts, 0,      'stty works: Term::Size::Perl not attempted';
+        like $buf,      qr/\e\[/,'stty works: terminal detected, colors applied';
+    }
+
+    # stty fails, Term::Size::Perl works: termW from Term::Size::Perl
+    {
+        no warnings 'redefine';
+        local *Devel::Bug::_isTerm    = sub { 1 };
+        local *Devel::Bug::_sttyWidth = sub { 0 };
+        local *Devel::Bug::_tspWidth  = sub { 80 };
+
+        Devel::Bug->import(out => *TESTOUT, color => '', vc => 'red');
+        reset_capture();
+        my $in;
+        ($in = bug('c') = 42);
+        like $buf, qr/\e\[/, 'stty fails, Term::Size::Perl works: colors applied';
+    }
+
+    # stty fails, Term::Size::Perl unavailable: termW=0, carp fired
+    {
+        no warnings 'redefine';
+        local *Devel::Bug::_isTerm    = sub { 1 };
+        local *Devel::Bug::_sttyWidth = sub { 0 };
+        $attempts = 0;
+        delete local $INC{'Term/Size/Perl.pm'};
+        local @INC = ($block, @INC);
+
+        Devel::Bug->import(out => *TESTOUT, color => '', vc => 'red');
         reset_capture();
         my $in;
         my $warned = '';
         local $SIG{__WARN__} = sub { $warned .= $_[0] };
-        ($in = bug('x') = 42);
-        is $attempts, 1,                    'noterm=falsy: require attempted once';
-        like $buf,    qr/42/,               'noterm=falsy: output still produced when Term::Size::Perl unavailable';
-        is $in,       42,                   'noterm=falsy: value passes through';
-        like $warned, qr/Term::Size::Perl/, 'noterm=falsy: carp fired when Term::Size::Perl unavailable';
+        ($in = bug('c') = 42);
+        is     $attempts, 1,                    'stty fails, Term::Size::Perl unavailable: require attempted';
+        unlike $buf,      qr/\e\[/,             'stty fails, Term::Size::Perl unavailable: no colors (termW=0)';
+        is     $in,       42,                   'value passes through';
+        like   $warned,   qr/Term::Size::Perl/, 'stty fails, Term::Size::Perl unavailable: carp fired';
     }
 }
 

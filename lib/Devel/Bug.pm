@@ -43,14 +43,24 @@ use constant USE_OPTIONS => {
 
 use constant OPTION_ALIASES => do {
     my (%h, $opt, $spec);
-    @h{ @{$spec}[1..$#$spec] }= ($opt) x $#$spec while ($opt, $spec)= each %{ +USE_OPTIONS };
+    @h{ @{$spec}[1..$#$spec] }= ( $opt ) x $#$spec while ($opt, $spec)= each %{ +USE_OPTIONS };
     \%h;
 };
 
 use constant CALLER_INFO => qw(package filename lineno);
 
 
-# Takes an ARRAY REF and return a list of ARRAY refs of pairs of elements from it.
+# Terminal detection helpers.
+sub _isTerm    { -t $_[0] }
+sub _sttyWidth { (qx(stty size 2>/dev/null)=~/^\d+\s+(\d+)/)[0] || 0 }
+
+sub _tspWidth {
+    my $w= eval { require Term::Size::Perl; (Term::Size::Perl::chars($_[0]))[0] };
+    $@ and carp qq(Unable to load Term::Size::Perl: specify option 'noterm => 1' to suppress this warning);
+    $w || 0;
+}
+
+# Takes an ARRAY REF and returns a list of ARRAY refs of pairs of elements from it.
 sub _pairs {
     my $array= shift;
     my @list;
@@ -89,9 +99,11 @@ sub validate {
         exists $optDefs->{$opt} or croak qq(Unknown option '$opt');
 
         # Confirm and process option values and their types.
-        $optDefs->{$opt}[0] eq '+'
+        my $type= $optDefs->{$opt}[0];
+
+        $type eq '+'
         ?   (defined and $_= m{^(?:on|1)$}i? 1 : m{^(?:auto|)$}i? '' : m{^off$}i? undef : croak qq(Illegal option value: $opt => '$_'))
-        :   ($optDefs->{$opt}[0] eq '*' or $optDefs->{$opt}[0] eq ref or croak qq(Option '$opt' may not be type '@{[ ref || '(SCALAR)' ]}'));
+        :   ($type eq '*' or $optDefs->{$opt}[0] eq ref or croak qq(Option '$opt' may not be type '@{[ ref || '(SCALAR)' ]}'));
 
         push @options, $opt => $_;
     }
@@ -130,13 +142,13 @@ sub import {
 
 
 # Debugging utility class.
-#   Allows for inlining a temporary "bug" which will output intermediate expression data.
+#   Allows for inlining a temporary "bug" sub which will output intermediate expression data.
 #   Ex:     my $infoPN= $CV_INFO_DIR."/".(bug('relpath')= substr($_, length($sourceDir) + 1));
 #   Output: relpath=(...)
 
 # To preserve list context, use form: (bug 'list')= ( some list );
 
-sub bug :lvalue {   # ('label[:flags]', key/val paired options)
+sub bug :lvalue {
     # Create object and populate it with options from import and bug().
     my $self= bless { %OPTIONS, validate BUG_OPTIONS, @_ }, __PACKAGE__;
 
@@ -155,22 +167,22 @@ sub bug :lvalue {   # ('label[:flags]', key/val paired options)
         tie my @a, __PACKAGE__, $self;
         return @a;
     } else {
-        $self->{data}= \do { my $scalar };
+        $self->{data}= \my $scalar;
 
         tie my $s, __PACKAGE__, $self;
         return $s;
     }
 }
 
-# Just pass along self object constructed in bug(), which calls these.
+# Just pass along self object constructed in bug(), which invokes these via tie().
 sub TIESCALAR { $_[1] }
 sub TIEARRAY  { $_[1] }
 
-# Methods for tied arrays.
+# Methods for tied array.
 sub CLEAR     {    $_[0]->{data}= [] }
 sub FETCHSIZE { @{ $_[0]->{data} }   }
 
-# Shared methods:              SCALARs                          ARRAYs
+# Shared methods:              SCALAR                           ARRAY
 sub FETCH     { @_ == 1?  ${ $_[0]->{data} }         :  $_[0]->{data}[ $_[1] ]         }
 sub STORE     { @_ == 2? (${ $_[0]->{data} }= $_[1]) : ($_[0]->{data}[ $_[1] ]= $_[2]) }
 
@@ -189,12 +201,7 @@ sub DESTROY {
     $indices||= '';
 
     # Get terminal width if requested and available.
-    my $termW= 0;
-
-    unless ($self->{noterm}) {
-        $termW= eval { require Term::Size::Perl; (Term::Size::Perl::chars($self->{out}))[0] } || 0;
-        $@ and carp qq(Unable to load Term::Size::Perl: specify option 'noterm => 1' to suppress this warning);
-    }
+    my $termW= (not $self->{noterm} and _isTerm($self->{out}))? _sttyWidth() || _tspWidth($self->{out}) : 0;
 
     # Get the pretty printer sub.
     my $ppSub;
@@ -274,7 +281,7 @@ sub AUTOLOAD {
     croak qq(Attempt to call unneeded non-existent subroutine '$AUTOLOAD': class @{[ __PACKAGE__ ]} intended for inline logging only);
 }
 
-# If these get called, they need to be no-ops, since we're only using tied array for logging.
+# If these get called, they need to be no-ops, since we're only using the tied array for logging.
 sub EXTEND    { }
 sub STORESIZE { }
 
@@ -480,13 +487,13 @@ Color specification for values. Default: C<'red on_grey23'>.
 =item B<noterm> (aliases: B<noterminal>, B<n>)
 
 Disable terminal width detection.
-When set, L<Term::Size::Perl> is never loaded, making it an optional
-dependency.
+When set, neither C<stty> nor L<Term::Size::Perl> is consulted, making
+both entirely optional.
 With C<noterm> enabled, terminal-width-based multiline layout is suppressed,
 and C<color =E<gt> 'auto'> behaves as if the output is not a terminal.
 
-A warning is issued if terminal detection is attempted but
-L<Term::Size::Perl> cannot be loaded.
+A warning is issued if terminal detection is attempted, C<stty size> fails,
+and L<Term::Size::Perl> cannot be loaded.
 Set C<noterm> to suppress both the detection and the warning.
 
 =back
@@ -606,8 +613,9 @@ which is the reverse of data flow - hence C<'doubled'> prints before C<'evens'>.
 
 L<Term::ANSIColor>, L<Data::Dumper>.
 
-L<Term::Size::Perl> is used for terminal width detection and is loaded
-on demand. It is not required when C<noterm> is set.
+Terminal width detection first tries C<stty size>. L<Term::Size::Perl> is
+loaded on demand only if C<stty> is unavailable or returns no output, and
+is never consulted when C<noterm> is set.
 
 L<Data::Dump> and other pretty-printer modules are optional;
 see the C<pp> option.
@@ -622,18 +630,4 @@ This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself.
 
 =cut
-
-
-# Implemented. Keeping comment because it's a good use example.
-
-# IDEA:
-#   NOW:
-#   subname($sub)=~/^.+(?=::)/
-#   ?   do { print "\$&=($&)\n"; *{ $caller.'::'.$name }= \&{ $&.'::'.$name } }
-#   :   carp qq(Unable to get package name from anonymous sub "@{[ subname($sub) ]}");
-#
-#   INSTEAD, let bug output something other than expression value (while still passing that through); convenient for flow:
-#   subname($sub)=~/^.+(?=::)/
-#   ?   bug($&)= *{ $caller.'::'.$name }= \&{ $&.'::'.$name }
-#   :   carp qq(Unable to get package name from anonymous sub "@{[ subname($sub) ]}");
 

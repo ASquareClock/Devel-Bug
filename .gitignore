@@ -1,0 +1,13 @@
+.DS_Store
+*.swp
+*~
+*.bak
+*.tmp
+info/
+old/
+nytprof.*
+blib/
+Makefile
+pm_to_blib
+MYMETA.json
+MYMETA.yml
