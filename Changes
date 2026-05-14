@@ -1,4 +1,9 @@
 Revision history for Devel-Bug
 
+0.02  2026-05-14
+    - Fix PAX headers in dist tarball (use GNU tar on macOS).
+    - Add LICENSE, SECURITY.md, CONTRIBUTING.md.
+    - Add provides and GNU tar to Makefile.PL.
+
 0.01  2026-04-29
     - Initial release.

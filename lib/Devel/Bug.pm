@@ -6,7 +6,7 @@
 
 package Devel::Bug;
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 use v5.8;
 use utf8;
