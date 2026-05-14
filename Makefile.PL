@@ -24,6 +24,9 @@ WriteMakefile(
 
     META_MERGE => {
         'meta-spec' => { version => 2 },
+        resources => {
+            bugtracker => { web => 'https://rt.cpan.org/Public/Dist/Display.html?Name=Devel-Bug' },
+        },
         provides => {
             'Devel::Bug' => {
                 file    => 'lib/Devel/Bug.pm',

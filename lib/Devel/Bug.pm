@@ -51,7 +51,7 @@ use constant OPTION_ALIASES => do {
 use constant CALLER_INFO => qw(package filename lineno);
 
 
-# Terminal detection helpers. (Separate to facilitate testing.)
+# Terminal detection helpers. (Extracated from DESTROY to facilitate testing.)
 sub _isTerm    { -t $_[0] }
 sub _sttyWidth { (qx(stty size 2>/dev/null)=~/^\d+\s+(\d+)/)[0] || 0 }
 
@@ -62,16 +62,7 @@ sub _tspWidth {
 }
 
 # Takes an ARRAY REF and returns a list of ARRAY refs of pairs of elements from it.
-sub _pairs {
-    my $array= shift;
-    my @list;
-
-    for (my $i= 0; $i < @$array; $i+= 2) {
-        push @list, [ $array->[$i] => $array->[$i + 1] ];
-    }
-
-    @list;
-}
+sub _pairs { my $a= $_[0]; map [ $a->[ $_<<1 ], $a->[ ($_<<1) + 1 ] ], 0..$#$a>>1 }
 
 
 # Validate options according to provided definitions.
