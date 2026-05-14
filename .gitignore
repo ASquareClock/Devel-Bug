@@ -11,3 +11,5 @@ Makefile
 pm_to_blib
 MYMETA.json
 MYMETA.yml
+Devel-Bug-*/
+Devel-Bug-*.tar.gz

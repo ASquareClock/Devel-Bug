@@ -2,7 +2,9 @@
 ^\.git/
 ^\.gitignore$
 ^MANIFEST\.SKIP$
+^MANIFEST\.bak$
 ^Makefile$
+^MYMETA\.
 ^blib/
 ^pm_to_blib$
 ^Devel-Bug-[\d.]+\.tar\.gz$

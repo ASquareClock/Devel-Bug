@@ -14,6 +14,8 @@ use utf8;
 use strict;
 use warnings;
 
+use Term::ANSIColor;
+
 use Carp qw(croak carp);
 
 
@@ -50,7 +52,7 @@ use constant OPTION_ALIASES => do {
 use constant CALLER_INFO => qw(package filename lineno);
 
 
-# Terminal detection helpers.
+# Terminal detection helpers. (Separate to facilitate testing.)
 sub _isTerm    { -t $_[0] }
 sub _sttyWidth { (qx(stty size 2>/dev/null)=~/^\d+\s+(\d+)/)[0] || 0 }
 
@@ -188,8 +190,6 @@ sub STORE     { @_ == 2? (${ $_[0]->{data} }= $_[1]) : ($_[0]->{data}[ $_[1] ]= 
 
 # Format and output captured values upon destruction of temporary tied variable.
 sub DESTROY {
-    use Term::ANSIColor;
-
     my $self= $_[0];
     my $override= exists $self->{val};
 

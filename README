@@ -1,5 +1,5 @@
 NAME
-    Devel::Bug - Transparent inline debugging probe
+    Devel::Bug - Transparent inline debugging probe (pure Perl)
 
 SYNOPSIS
         use Devel::Bug;                           # output to STDERR
@@ -134,14 +134,15 @@ IMPORT AND CALL OPTIONS
 
   Terminal detection
     noterm (aliases: noterminal, n)
-        Disable terminal width detection. When set, Term::Size::Perl is
-        never loaded, making it an optional dependency. With "noterm"
-        enabled, terminal-width-based multiline layout is suppressed, and
-        "color => 'auto'" behaves as if the output is not a terminal.
+        Disable terminal width detection. When set, neither "stty" nor
+        Term::Size::Perl is consulted, making both entirely optional. With
+        "noterm" enabled, terminal-width-based multiline layout is
+        suppressed, and "color => 'auto'" behaves as if the output is not a
+        terminal.
 
-        A warning is issued if terminal detection is attempted but
-        Term::Size::Perl cannot be loaded. Set "noterm" to suppress both the
-        detection and the warning.
+        A warning is issued if terminal detection is attempted, "stty size"
+        fails, and Term::Size::Perl cannot be loaded. Set "noterm" to
+        suppress both the detection and the warning.
 
   Pretty-printer
     pp  Fully-qualified name of the function used to format reference
@@ -236,8 +237,9 @@ CHAINING
 DEPENDENCIES
     Term::ANSIColor, Data::Dumper.
 
-    Term::Size::Perl is used for terminal width detection and is loaded on
-    demand. It is not required when "noterm" is set.
+    Terminal width detection first tries "stty size". Term::Size::Perl is
+    loaded on demand only if "stty" is unavailable or returns no output, and
+    is never consulted when "noterm" is set.
 
     Data::Dump and other pretty-printer modules are optional; see the "pp"
     option.

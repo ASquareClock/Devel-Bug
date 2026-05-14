@@ -2,7 +2,7 @@ use ExtUtils::MakeMaker;
 
 WriteMakefile(
     NAME             => 'Devel::Bug',
-    AUTHOR           => 'Kevin Shea <PAUSEID@cpan.org>',
+    AUTHOR           => 'Kevin Shea <KEVJSHEA@cpan.org>',
     VERSION_FROM     => 'lib/Devel/Bug.pm',
     ABSTRACT_FROM    => 'lib/Devel/Bug.pm',
     LICENSE          => 'perl_5',
