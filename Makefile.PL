@@ -24,6 +24,12 @@ WriteMakefile(
 
     META_MERGE => {
         'meta-spec' => { version => 2 },
+        provides => {
+            'Devel::Bug' => {
+                file    => 'lib/Devel/Bug.pm',
+                version => '0.01',
+            },
+        },
         prereqs => {
             runtime => {
                 suggests => {
@@ -34,6 +40,6 @@ WriteMakefile(
         },
     },
 
-    dist  => { COMPRESS => 'gzip -9f', SUFFIX => 'gz' },
+    dist  => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', TAR => '/usr/local/bin/gtar', TARFLAGS => 'cvf' },
     clean => { FILES => 'Devel-Bug-*' },
 );
