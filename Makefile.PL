@@ -25,7 +25,10 @@ WriteMakefile(
     META_MERGE => {
         'meta-spec' => { version => 2 },
         resources => {
-            bugtracker => { web => 'https://rt.cpan.org/Public/Dist/Display.html?Name=Devel-Bug' },
+            bugtracker => { web  => 'https://rt.cpan.org/Public/Dist/Display.html?Name=Devel-Bug' },
+            repository => { url  => 'https://github.com/ASquareClock/Devel-Bug.git',
+                            web  => 'https://github.com/ASquareClock/Devel-Bug',
+                            type => 'git' },
         },
         provides => {
             'Devel::Bug' => {
