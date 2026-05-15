@@ -33,7 +33,7 @@ WriteMakefile(
         provides => {
             'Devel::Bug' => {
                 file    => 'lib/Devel/Bug.pm',
-                version => '0.02',
+                version => '0.03',
             },
         },
         prereqs => {

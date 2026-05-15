@@ -1,5 +1,10 @@
 Revision history for Devel-Bug
 
+0.03  2026-05-15
+    - Fix @info{(CALLER_INFO)} hash slice to avoid scalar-context warning on older Perls.
+    - Fix lvalue sub to avoid "Bizarre copy of ARRAY in return" on affected Perl versions.
+    - Add GitHub repository and RT bugtracker to META_MERGE resources.
+
 0.02  2026-05-14
     - Fix PAX headers in dist tarball (use GNU tar on macOS).
     - Add LICENSE, SECURITY.md, CONTRIBUTING.md.
