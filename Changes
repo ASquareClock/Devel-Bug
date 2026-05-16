@@ -1,5 +1,8 @@
 Revision history for Devel-Bug
 
+0.04  2026-05-15
+    - Skip Data::Dump and Term::Size::Perl tests when not installed (optional deps).
+
 0.03  2026-05-15
     - Fix @info{(CALLER_INFO)} hash slice to avoid scalar-context warning on older Perls.
     - Fix lvalue sub to avoid "Bizarre copy of ARRAY in return" on affected Perl versions.
