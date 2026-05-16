@@ -16,9 +16,7 @@ ok lives { require Devel::Bug }, 'Devel::Bug loads';
 # 2. Dependencies available
 # ---------------------------------------------------------------------------
 
-ok lives { require Term::ANSIColor  }, 'Term::ANSIColor available';
-ok lives { require Term::Size::Perl }, 'Term::Size::Perl available';
-ok lives { require List::Util       }, 'List::Util available';
-ok lives { require Data::Dump       }, 'Data::Dump available';
+ok lives { require Term::ANSIColor }, 'Term::ANSIColor available';
+ok lives { require List::Util      }, 'List::Util available';
 
 done_testing;

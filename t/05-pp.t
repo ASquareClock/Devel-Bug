@@ -48,54 +48,52 @@ my $href = {a => 1};
     like   $buf, qr/42/,     'scalar value appears in output';
 }
 
-# ---------------------------------------------------------------------------
-# pp => 'Data::Dump::pp' at import time
-# ---------------------------------------------------------------------------
+subtest 'Data::Dump pp' => sub {
+    plan skip_all => 'Data::Dump not installed' unless eval { require Data::Dump; 1 };
 
-{
-    Devel::Bug->import(out => *TESTOUT, color => undef, pp => 'Data::Dump::pp');
-    reset_capture();
-    my $in;
-    ($in = bug('ref', val => $href) = 42);
-    unlike $buf, qr/\$VAR1/, 'Data::Dump::pp used when pp set at import';
-    like   $buf, qr/a/,      'ref value appears in output with Data::Dump::pp';
-}
+    # pp => 'Data::Dump::pp' at import time
+    {
+        Devel::Bug->import(out => *TESTOUT, color => undef, pp => 'Data::Dump::pp');
+        reset_capture();
+        my $in;
+        ($in = bug('ref', val => $href) = 42);
+        unlike $buf, qr/\$VAR1/, 'Data::Dump::pp used when pp set at import';
+        like   $buf, qr/a/,      'ref value appears in output with Data::Dump::pp';
+    }
 
-# Non-ref scalars still bypass pp even when a custom pp is set.
-{
-    Devel::Bug->import(out => *TESTOUT, color => undef, pp => 'Data::Dump::pp');
-    reset_capture();
-    my $in;
-    ($in = bug('num') = 42);
-    unlike $buf, qr/\$VAR1/, 'pp not called for non-ref scalar with custom pp set';
-    like   $buf, qr/42/,     'scalar value still appears in output';
-}
+    # Non-ref scalars still bypass pp even when a custom pp is set.
+    {
+        Devel::Bug->import(out => *TESTOUT, color => undef, pp => 'Data::Dump::pp');
+        reset_capture();
+        my $in;
+        ($in = bug('num') = 42);
+        unlike $buf, qr/\$VAR1/, 'pp not called for non-ref scalar with custom pp set';
+        like   $buf, qr/42/,     'scalar value still appears in output';
+    }
 
-# ---------------------------------------------------------------------------
-# pp => 'Data::Dump::pp' as a per-call override
-# ---------------------------------------------------------------------------
+    # pp => 'Data::Dump::pp' as a per-call override
+    {
+        Devel::Bug->import(out => *TESTOUT, color => undef);
+        reset_capture();
+        my $in;
+        ($in = bug('ref', val => $href, pp => 'Data::Dump::pp') = 42);
+        unlike $buf, qr/\$VAR1/, 'Data::Dump::pp used when pp set per-call';
+    }
 
-{
-    Devel::Bug->import(out => *TESTOUT, color => undef);
-    reset_capture();
-    my $in;
-    ($in = bug('ref', val => $href, pp => 'Data::Dump::pp') = 42);
-    unlike $buf, qr/\$VAR1/, 'Data::Dump::pp used when pp set per-call';
-}
+    # Per-call pp does not affect other calls (import default still applies).
+    {
+        Devel::Bug->import(out => *TESTOUT, color => undef);
 
-# Per-call pp does not affect other calls (import default still applies).
-{
-    Devel::Bug->import(out => *TESTOUT, color => undef);
+        reset_capture();
+        my $in;
+        ($in = bug('ref', val => $href, pp => 'Data::Dump::pp') = 42);
+        unlike $buf, qr/\$VAR1/, 'per-call pp uses Data::Dump::pp';
 
-    reset_capture();
-    my $in;
-    ($in = bug('ref', val => $href, pp => 'Data::Dump::pp') = 42);
-    unlike $buf, qr/\$VAR1/, 'per-call pp uses Data::Dump::pp';
-
-    reset_capture();
-    ($in = bug('ref', val => $href) = 42);
-    like $buf, qr/\$VAR1/, 'subsequent call reverts to default pp';
-}
+        reset_capture();
+        ($in = bug('ref', val => $href) = 42);
+        like $buf, qr/\$VAR1/, 'subsequent call reverts to default pp';
+    }
+};
 
 # ---------------------------------------------------------------------------
 # error cases — invalid pp warns and falls back to Data::Dump::pp
