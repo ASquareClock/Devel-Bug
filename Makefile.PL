@@ -15,7 +15,9 @@ WriteMakefile(
     },
 
     TEST_REQUIRES => {
-        'Test2::V0' => 0,
+        'Test2::V0'        => 0,
+        'Data::Dump'       => 0,
+        'Term::Size::Perl' => 0,
     },
 
     CONFIGURE_REQUIRES => {

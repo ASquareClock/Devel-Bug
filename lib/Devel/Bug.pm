@@ -153,15 +153,8 @@ sub bug :lvalue {
     $self->{info}= join(' ', map $info{$_}, grep $self->{$_}, CALLER_INFO);
 
     # Tie an array or scalar, for list or scalar context respectively.
-    my (@a, $s);
-
-    if (wantarray) { $self->{data}= [];          tie @a, __PACKAGE__, $self }
-    else           { $self->{data}= \my $scalar; tie $s, __PACKAGE__, $self }
-
-    # Implicit return (no return keyword) avoids "Bizarre copy of ARRAY in return".
-    #   It's a known Perl bug with lvalue subs returning tied arrays.
-    if (wantarray) { @a }
-    else           { $s }
+    if (wantarray) { $self->{data}= [];          my @a; tie @a, __PACKAGE__, $self; @a } # implicit return used to avoid known perl bug:
+    else           { $self->{data}= \my $scalar; my $s; tie $s, __PACKAGE__, $self; $s } #  "Bizarre copy of ARRAY in return" in some versions
 }
 
 # Just pass along self object constructed in bug(), which invokes these via tie().
