@@ -1,5 +1,11 @@
 Revision history for Devel-Bug
 
+0.05  2026-05-16
+    - Refactor lvalue sub to return deref expressions (@$r, $$r) instead of
+      named lexicals, to fix "Can't return a temporary from lvalue subroutine"
+      on Perl 5.8-5.12.
+    - Fix ambiguous bare caller in import().
+
 0.04  2026-05-15
     - Skip Data::Dump and Term::Size::Perl tests when not installed (optional deps).
 

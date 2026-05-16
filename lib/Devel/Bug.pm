@@ -6,7 +6,7 @@
 
 package Devel::Bug;
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 use v5.8;
 use utf8;
@@ -129,7 +129,7 @@ sub import {
 
     # Export bug().
     no strict 'refs';
-    *{ caller.'::'.$bug }= \&bug;
+    *{ (caller).'::'.$bug }= \&bug;
 }
 
 
@@ -153,8 +153,20 @@ sub bug :lvalue {
     $self->{info}= join(' ', map $info{$_}, grep $self->{$_}, CALLER_INFO);
 
     # Tie an array or scalar, for list or scalar context respectively.
-    if (wantarray) { $self->{data}= [];          my @a; tie @a, __PACKAGE__, $self; @a } # implicit return used to avoid known perl bug:
-    else           { $self->{data}= \my $scalar; my $s; tie $s, __PACKAGE__, $self; $s } #  "Bizarre copy of ARRAY in return" in some versions
+    if (wantarray) {
+        $self->{data}= [];
+
+        my $r= [];
+        tie @$r, __PACKAGE__, $self;
+        @$r;
+    } else {
+        $self->{data}= \my $data_scalar;
+
+        my $r= \my $tied_scalar;
+        tie $$r, __PACKAGE__, $self;
+        $$r;
+    }
+    # Implicit return used to avoid known perl bug: "Bizarre copy of ARRAY in return" in some versions.
 }
 
 # Just pass along self object constructed in bug(), which invokes these via tie().
