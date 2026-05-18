@@ -6,7 +6,7 @@
 
 package Devel::Bug;
 
-our $VERSION = '0.06';
+our $VERSION = '0.07';
 
 use v5.8;
 use utf8;
@@ -156,21 +156,18 @@ sub bug :lvalue {
     # Package variables localized per call: named vars are never "temporaries" (avoids
     # "Can't return a temporary from lvalue subroutine" on v5.8-5.12 and "Bizarre copy
     # of ARRAY" on affected versions). local() is reentrant via per-call save-points.
+    our   (@lvArray, $lvScalar);
+    local (@lvArray, $lvScalar);
+
     if (wantarray) {
         $self->{data}= [];
 
-        our   @lvArray;
-        local @lvArray;
-        tie   @lvArray, __PACKAGE__, $self;
-        
+        tie @lvArray, __PACKAGE__, $self;
         @lvArray;
     } else {
         $self->{data}= \my $scalar;
 
-        our   $lvScalar;
-        local $lvScalar;
-        tie   $lvScalar, __PACKAGE__, $self;
-
+        tie $lvScalar, __PACKAGE__, $self;
         $lvScalar;
     }
     # Implicit return used to avoid known perl bug: "Bizarre copy of ARRAY in return" in some perl versions.

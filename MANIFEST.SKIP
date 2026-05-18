@@ -1,5 +1,6 @@
 # Standard ExtUtils::MakeMaker exclusions
 ^\.git/
+^\.claude/
 ^\.gitignore$
 ^MANIFEST\.SKIP$
 ^MANIFEST\.bak$
@@ -8,5 +9,6 @@
 ^blib/
 ^pm_to_blib$
 ^Devel-Bug-[\d.]+\.tar\.gz$
+^Devel-Bug-[\d.]+/
 ^test\.pl$
 \.DS_Store$

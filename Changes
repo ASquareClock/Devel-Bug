@@ -1,5 +1,9 @@
 Revision history for Devel-Bug
 
+0.07  2026-05-17
+    - Move local() for lvalue package variables to sub scope (not if-block scope),
+      fixing "Bizarre copy of ARRAY in block exit" on Perl 5.14-5.18.
+
 0.06  2026-05-17
     - Fix lvalue sub failures on Perl 5.12-5.16: use localized package variables
       (@lvArray, $lvScalar) instead of lexicals or deref expressions, avoiding both
