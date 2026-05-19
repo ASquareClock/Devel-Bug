@@ -6,9 +6,9 @@
 
 package Devel::Bug;
 
-our $VERSION = '0.07';
+our $VERSION = '0.08';
 
-use v5.8;
+use v5.20;
 use utf8;
 
 use strict;
@@ -153,24 +153,9 @@ sub bug :lvalue {
     $self->{info}= join(' ', map $info{$_}, grep $self->{$_}, CALLER_INFO);
 
     # Tie an array or scalar, for list or scalar context respectively.
-    # Package variables localized per call: named vars are never "temporaries" (avoids
-    # "Can't return a temporary from lvalue subroutine" on v5.8-5.12 and "Bizarre copy
-    # of ARRAY" on affected versions). local() is reentrant via per-call save-points.
-    our   (@lvArray, $lvScalar);
-    local (@lvArray, $lvScalar);
-
-    if (wantarray) {
-        $self->{data}= [];
-
-        tie @lvArray, __PACKAGE__, $self;
-        @lvArray;
-    } else {
-        $self->{data}= \my $scalar;
-
-        tie $lvScalar, __PACKAGE__, $self;
-        $lvScalar;
-    }
-    # Implicit return used to avoid known perl bug: "Bizarre copy of ARRAY in return" in some perl versions.
+    # Implicit return (no return keyword) avoids "Bizarre copy of ARRAY in return".
+    if (wantarray) { $self->{data}= [];          tie my @a, __PACKAGE__, $self; @a }
+    else           { $self->{data}= \my $scalar; tie my $s, __PACKAGE__, $self; $s }
 }
 
 # Just pass along self object constructed in bug(), which invokes these via tie().

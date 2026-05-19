@@ -1,5 +1,10 @@
 Revision history for Devel-Bug
 
+0.08  2026-05-18
+    - Raise MIN_PERL_VERSION to 5.020; no Perl version below 5.20 has ever passed
+      CPAN Testers across any release.
+    - Simplify lvalue sub: use inline my declarations, drop package variable workarounds.
+
 0.07  2026-05-17
     - Move local() for lvalue package variables to sub scope (not if-block scope),
       fixing "Bizarre copy of ARRAY in block exit" on Perl 5.14-5.18.

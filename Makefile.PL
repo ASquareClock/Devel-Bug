@@ -6,7 +6,7 @@ WriteMakefile(
     VERSION_FROM     => 'lib/Devel/Bug.pm',
     ABSTRACT_FROM    => 'lib/Devel/Bug.pm',
     LICENSE          => 'perl_5',
-    MIN_PERL_VERSION => '5.008',
+    MIN_PERL_VERSION => '5.020',
 
     PREREQ_PM => {
         'Carp'            => 0,
@@ -35,7 +35,7 @@ WriteMakefile(
         provides => {
             'Devel::Bug' => {
                 file    => 'lib/Devel/Bug.pm',
-                version => '0.07',
+                version => '0.08',
             },
         },
         prereqs => {
